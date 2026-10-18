@@ -138,16 +138,18 @@ a key fires twice.
   |---|---|
   | `direct` (default) | the click is sent straight to the table window; the cursor doesn't move |
   | `cursor` | the cursor jumps to the button for a moment and comes back — for clients that ignore `direct` |
-  | `keys` | sends the client's own hotkey for that action — for rooms with built-in hotkeys that can't be bound to `Space` (default for PokerOK/GG) |
+  | `keys` | sends the client's own hotkey for that action — for rooms with built-in hotkeys that can't be bound to `Space` |
 
 - **Recording buttons** (for `direct` and `cursor`), once per room: on your
   turn, hover over the button and press `Ctrl+Alt+F` (fold), `Ctrl+Alt+S`
   (check/call) or `Ctrl+Alt+D` (bet). The position is stored as a fraction of
   the table, so it still fits after the table is shrunk into a slot, and it
   applies to every room of the same client program.
-- **PokerOK / GG:** in the client's settings bind fold, check/call and bet to
-  `Ctrl+F1`, `Ctrl+F2`, `Ctrl+F3` (or to your own keys — then change
-  `ClientKeys` in `config.json`).
+- **GG / PokerOK — no hotkeys.** The program never presses anything on GG
+  tables — no clicks, no client hotkeys, whatever `config.json` says. `Space`,
+  `S` and `D` over a GG table reach the client as usual, buttons can't be
+  recorded there, and GG rooms are greyed out in the menu. Focus under the
+  mouse and the focus frame still work on GG tables.
 - `Ctrl+Alt+H` — turn the hotkeys off/on (e.g. to type in the table chat).
 - A room can be excluded: tray menu → hotkeys → room → untick it.
 - A client running as administrator only accepts clicks and focus from a
@@ -168,11 +170,8 @@ Settings — the `ActionKeys` section of `bin-keys\config.json`:
     { "Name": "Чек/колл", "Key": "S",     "RecordHotkey": "Ctrl+Alt+S" },
     { "Name": "Ставка",   "Key": "D",     "RecordHotkey": "Ctrl+Alt+D" } ],
   "ClickMode": "direct",
-  "RoomClickModes": { "GGnet": "keys", "CoinPoker": "cursor" },
-  "ClientKeys": [
-    { "Room": "GGnet", "Action": "Фолд",     "Keys": "Ctrl+F1" },
-    { "Room": "GGnet", "Action": "Чек/колл", "Keys": "Ctrl+F2" },
-    { "Room": "GGnet", "Action": "Ставка",   "Keys": "Ctrl+F3" } ],
+  "RoomClickModes": { "CoinPoker": "cursor" },
+  "ClientKeys": [],
   "ExcludeRooms": [ "QQPK" ],
   "Buttons": [ { "Room": "Redstar", "Process": "PokerClient", "Action": "Фолд", "X": 0.5893, "Y": 0.9196 } ]
 }
@@ -180,7 +179,10 @@ Settings — the `ActionKeys` section of `bin-keys\config.json`:
 
 (`Фолд` = fold, `Чек/колл` = check/call, `Ставка` = bet.) In `RoomClickModes`
 and `ClientKeys` a room can be named by its rule name or by its process
-(`GGnet` covers both GG tournament and cash tables). `Actions` can be
+(which covers all its rooms, e.g. a client's tournament and cash tables).
+`ClientKeys` is for the `keys` mode:
+`{ "Room": …, "Action": "Фолд", "Keys": "Ctrl+F1" }`, where `Keys` is the
+combination bound to that action in the client's own settings. `Actions` can be
 extended with more client buttons (e.g. a "½ pot" button): a name, a key and
 a record hotkey. Increase `ClickDelayMs` if a client misses presses.
 `OnlyWhenPokerActive: false` makes the keys work over a table even when

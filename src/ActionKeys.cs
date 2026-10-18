@@ -25,7 +25,7 @@ namespace TableManager
     /// <summary>Кнопка действия у рума: место на столе в долях клиентской области
     /// (0…1). Стол меняет размер, пропорции сохраняются — кнопка остаётся там же.
     /// Process — программа рума: кнопка подходит и к другим румам той же программы
-    /// (турниры и кэш GG — разные правила, а клиент один).</summary>
+    /// (турниры и кэш одного клиента — разные правила, а клиент один).</summary>
     public class ActionButton
     {
         public string Room { get; set; }
@@ -37,7 +37,7 @@ namespace TableManager
 
     /// <summary>Собственная клавиша клиента для действия (способ "keys"): то
     /// сочетание, что назначено действию в настройках самого клиента. Room — имя
-    /// рума или программы (GGnet).</summary>
+    /// рума или программы (PokerClient).</summary>
     public class ClientKey
     {
         public string Room { get; set; }
@@ -51,6 +51,10 @@ namespace TableManager
         /// <summary>Способы нажатия: клик прямо в окно стола (курсор не двигается),
         /// клик курсором (курсор на кнопку и обратно), собственные клавиши клиента.</summary>
         public const string DirectMode = "direct", CursorMode = "cursor", KeysMode = "keys";
+
+        /// <summary>Программа GG / ПокерОК: на её столах программа ничего не нажимает —
+        /// ни клики, ни клавиши клиента, что бы ни было в config.json.</summary>
+        public const string NoKeysProcess = "GGnet";
 
         /// <summary>false — клавиши за столами выключены совсем.</summary>
         public bool Enabled { get; set; }
@@ -107,15 +111,8 @@ namespace TableManager
                     new TableAction { Name = "Ставка", Key = "D", RecordHotkey = "Ctrl+Alt+D" },
                 },
                 ClickMode = DirectMode,
-                // ПокерОК (GG): свои клавиши клиента — как у Jurojin; в самом клиенте
-                // действиям назначаются те же сочетания.
-                RoomClickModes = new Dictionary<string, string> { { "GGnet", KeysMode } },
-                ClientKeys = new List<ClientKey>
-                {
-                    new ClientKey { Room = "GGnet", Action = "Фолд", Keys = "Ctrl+F1" },
-                    new ClientKey { Room = "GGnet", Action = "Чек/колл", Keys = "Ctrl+F2" },
-                    new ClientKey { Room = "GGnet", Action = "Ставка", Keys = "Ctrl+F3" },
-                },
+                RoomClickModes = new Dictionary<string, string>(),
+                ClientKeys = new List<ClientKey>(),
                 ExcludeRooms = new List<string>(),
                 Buttons = new List<ActionButton>(),
             };
@@ -136,12 +133,21 @@ namespace TableManager
             if (config.Buttons == null) config.Buttons = new List<ActionButton>();
             if (config.ToggleHotkey == null) config.ToggleHotkey = defaults.ToggleHotkey;
             if (config.ClickDelayMs <= 0) config.ClickDelayMs = defaults.ClickDelayMs;
+            // GG из прежних версий (свои клавиши клиента по умолчанию) — убрать: не работают.
+            foreach (var key in config.RoomClickModes.Keys.Where(k => Same(k, NoKeysProcess)).ToList()) config.RoomClickModes.Remove(key);
+            config.ClientKeys.RemoveAll(k => Same(k.Room, NoKeysProcess));
             return config;
         }
 
         public bool IsExcluded(string room)
         {
             return ExcludeRooms.Any(r => Same(r, room));
+        }
+
+        /// <summary>Программа, на столах которой клавиши не работают никогда (GG).</summary>
+        public static bool IsNoKeys(string process)
+        {
+            return Same(process, NoKeysProcess);
         }
 
         /// <summary>Способ нажатия для стола: по руму, потом по программе, потом общий.</summary>
@@ -349,7 +355,8 @@ namespace TableManager
             var text = string.Join(", ", Settings.Actions.Select(a => a.Name + " — " + a.Key).ToArray())
                 + "; нажатие: " + ModeName(Settings.ClickMode)
                 + string.Concat(Settings.RoomClickModes.Select(p => ", " + p.Key + " — " + ModeName(p.Value)).ToArray())
-                + (Settings.FocusUnderMouse == true ? "; стол под курсором — активный" : "");
+                + (Settings.FocusUnderMouse == true ? "; стол под курсором — активный" : "")
+                + "; GG — без клавиш";
             if (Settings.ExcludeRooms.Count > 0) text += "; без клавиш: " + string.Join(", ", Settings.ExcludeRooms.ToArray());
             return text;
         }
@@ -416,6 +423,7 @@ namespace TableManager
         /// <summary>Подменю рума: клавиши вкл/выкл, способ нажатия, что записано.</summary>
         private ToolStripMenuItem RoomMenu(string room, string process)
         {
+            if (ActionKeysConfig.IsNoKeys(process)) return new ToolStripMenuItem(room + " — без клавиш (GG)") { Enabled = false };
             var mode = Settings.ModeOf(room, process);
             var excluded = Settings.IsExcluded(room);
             var item = new ToolStripMenuItem(room + " — " + (excluded ? "без клавиш" : ModeName(mode))) { Checked = !excluded };
@@ -501,6 +509,7 @@ namespace TableManager
             {
                 return "Курсор не на столе " + table.Room;
             }
+            if (ActionKeysConfig.IsNoKeys(table.Process)) return table.Room + ": на столах GG клавиши не работают — кнопка не записана";
             Settings.Buttons.RemoveAll(b => b.Room == table.Room && b.Action == name);
             Settings.Buttons.Add(new ActionButton { Room = table.Room, Process = table.Process, Action = name, X = x, Y = y });
             _save();
@@ -624,7 +633,8 @@ namespace TableManager
             if (!Native.GetCursorPos(out cursor) || Native.LeftButtonDown()) return false;
             var tables = _tables();
             var table = TableAt(tables, cursor);
-            if (table == null || Settings.IsExcluded(table.Room)) return false;
+            // GG — клавиша уходит в клиент как обычно, программа ничего не нажимает.
+            if (table == null || Settings.IsExcluded(table.Room) || ActionKeysConfig.IsNoKeys(table.Process)) return false;
             if (Settings.OnlyWhenPokerActive && !PokerActive(tables)
                 && !(Settings.FocusUnderMouse == true && !RecentlyTyped() && Activate(table.Handle)))
             {

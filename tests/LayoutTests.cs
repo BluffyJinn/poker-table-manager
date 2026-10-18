@@ -363,27 +363,46 @@ public static class LayoutTests
         keys.ExcludeRooms.Add("QQPK");
         Check(keys.IsExcluded("qqpk") && !keys.IsExcluded("Redstar"), "рум без клавиш");
 
-        // Способ нажатия: общий — клик без курсора, ПокерОК — свои клавиши клиента (по программе GGnet,
-        // и для турниров «GG / PokerOK», и для кэша «GGnet (указан)»).
+        // GG: на столах программа ничего не нажимает — по умолчанию для GG ничего не задано,
+        // а GG из прежнего config.json (свои клавиши клиента) убирается.
+        Check(keys.RoomClickModes.Count == 0 && keys.ClientKeys.Count == 0, "по умолчанию для GG ничего не задано");
+        Check(ActionKeysConfig.IsNoKeys("GGnet") && ActionKeysConfig.IsNoKeys("ggnet") && !ActionKeysConfig.IsNoKeys("PokerClient")
+            && !ActionKeysConfig.IsNoKeys(null), "GG — без клавиш, по программе");
+        var oldGG = ActionKeysConfig.Fill(new ActionKeysConfig
+        {
+            RoomClickModes = new Dictionary<string, string> { { "GGnet", "keys" }, { "CoinPoker", "cursor" } },
+            ClientKeys = new List<ClientKey>
+            {
+                new ClientKey { Room = "GGnet", Action = "Фолд", Keys = "Ctrl+F1" },
+                new ClientKey { Room = "Winamax", Action = "Фолд", Keys = "F1" },
+            },
+        });
+        Check(!oldGG.RoomClickModes.ContainsKey("GGnet") && oldGG.ModeOf("CoinPoker", "CoinPoker") == "cursor"
+            && oldGG.ClientKeyOf("GG / PokerOK", "GGnet", "Фолд") == null && oldGG.ClientKeyOf("Winamax", "Winamax", "Фолд").Keys == "F1",
+            "GG из прежнего config.json убран, остальные румы как были");
+
+        // Способ нажатия: общий — клик без курсора; для рума — из меню, для программы — из config.json.
         Check(keys.ModeOf("Redstar", "PokerClient") == "direct", "по умолчанию — клик без курсора");
-        Check(keys.ModeOf("GG / PokerOK", "GGnet") == "keys" && keys.ModeOf("GGnet (указан)", "GGnet") == "keys",
-            "ПокерОК — свои клавиши клиента, по программе");
-        Check(keys.ClientKeyOf("GGnet (указан)", "GGnet", "Фолд").Keys == "Ctrl+F1"
-            && keys.ClientKeyOf("Redstar", "PokerClient", "Фолд") == null, "свои клавиши клиента — по программе");
+        keys.RoomClickModes["PokerApp"] = "keys";
+        keys.ClientKeys.Add(new ClientKey { Room = "PokerApp", Action = "Фолд", Keys = "F1" });
+        Check(keys.ModeOf("PokerApp турниры", "PokerApp") == "keys" && keys.ModeOf("PokerApp (указан)", "PokerApp") == "keys",
+            "свои клавиши клиента — по программе");
+        Check(keys.ClientKeyOf("PokerApp (указан)", "PokerApp", "Фолд").Keys == "F1"
+            && keys.ClientKeyOf("Redstar", "PokerClient", "Фолд") == null, "клавиши клиента — по программе");
         keys.SetMode("Redstar", "cursor");
-        keys.SetMode("gg / pokerok", "direct");
-        Check(keys.ModeOf("Redstar", "PokerClient") == "cursor" && keys.ModeOf("GG / PokerOK", "GGnet") == "direct"
-            && keys.ModeOf("GGnet (указан)", "GGnet") == "keys", "способ из меню — для рума, остальные румы программы как были");
+        keys.SetMode("pokerapp турниры", "direct");
+        Check(keys.ModeOf("Redstar", "PokerClient") == "cursor" && keys.ModeOf("PokerApp турниры", "PokerApp") == "direct"
+            && keys.ModeOf("PokerApp (указан)", "PokerApp") == "keys", "способ из меню — для рума, остальные румы программы как были");
         keys.RoomClickModes["AKs Poker"] = "непонятно";
         Check(keys.ModeOf("AKs Poker", "AKs Poker") == "direct", "непонятный способ — общий");
 
         // Кнопки: для рума, а если рум другой, но программа та же — тоже.
         keys.Buttons.Add(new ActionButton { Room = "Redstar", Process = "PokerClient", Action = "Фолд", X = 0.5, Y = 0.9 });
         Check(keys.ButtonOf("Redstar", "PokerClient", "Фолд") != null && keys.ButtonOf("Redstar", "PokerClient", "Ставка") == null
-            && keys.ButtonOf("GG / PokerOK", "GGnet", "Фолд") == null, "кнопки — по руму и действию");
+            && keys.ButtonOf("PokerApp турниры", "PokerApp", "Фолд") == null, "кнопки — по руму и действию");
         Check(keys.ButtonOf("PokerClient (указан)", "PokerClient", "Фолд") != null, "кнопка подходит другому руму той же программы");
-        keys.Buttons.Add(new ActionButton { Room = "GGnet (указан)", Action = "Фолд", X = 0.66, Y = 0.92 });
-        Check(keys.ButtonOf("GGnet (указан)", "GGnet", "Фолд").X == 0.66, "кнопка из первой версии (без программы) — по руму");
+        keys.Buttons.Add(new ActionButton { Room = "AKs Poker", Action = "Фолд", X = 0.66, Y = 0.92 });
+        Check(keys.ButtonOf("AKs Poker", "AKs Poker", "Фолд").X == 0.66, "кнопка из первой версии (без программы) — по руму");
         var lp = ActionKeys.MouseLParam(10, 20).ToInt64();
         Check(lp == 0x0014000A, "координаты для сообщений мыши");
 
@@ -399,7 +418,7 @@ public static class LayoutTests
             Check(fold != null && fold.X == 0.5 && fold.Y == 0.9 && keysLoaded.ActionKeys.IsExcluded("QQPK"),
                 "кнопки и румы без клавиш — в config.json");
             Check(keysLoaded.ActionKeys.ModeOf("Redstar", "PokerClient") == "cursor"
-                && keysLoaded.ActionKeys.ModeOf("GGnet (указан)", "GGnet") == "keys"
+                && keysLoaded.ActionKeys.ModeOf("PokerApp (указан)", "PokerApp") == "keys"
                 && keysLoaded.ActionKeys.FocusUnderMouse == true, "способы нажатия и фокус — в config.json");
             System.IO.File.WriteAllText(keysPath, "{ \"Gap\": 0 }");
             Check(Config.Load(keysPath).ActionKeys.Actions.Count == 3 && System.IO.File.ReadAllText(keysPath).Contains("ActionKeys"),
