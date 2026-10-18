@@ -7,11 +7,11 @@ $root = $PSScriptRoot
 $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if ($Keys) {
     $bin = Join-Path $root 'bin-keys'
-    $name = 'TableManagerKeys.exe'
+    $name = 'tmk.exe'
     $define = @('/define:ACTION_KEYS')
 } else {
     $bin = Join-Path $root 'bin'
-    $name = 'TableManager.exe'
+    $name = 'tm.exe'
     $define = @()
 }
 New-Item -ItemType Directory -Force $bin | Out-Null

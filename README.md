@@ -37,8 +37,8 @@ build and run it.
 ## Build
 
 ```powershell
-.\build.ps1          # standard build -> bin\TableManager.exe
-.\build.ps1 -Keys    # hotkeys build  -> bin-keys\TableManagerKeys.exe
+.\build.ps1          # standard build -> bin\tm.exe
+.\build.ps1 -Keys    # hotkeys build  -> bin-keys\tmk.exe
 ```
 
 Each build also produces `LayoutTests.exe` (unit tests, exit code 0 when all
@@ -116,8 +116,8 @@ Created on first start; after editing use tray menu → reload settings.
 
 ## Hotkeys at the tables (separate build)
 
-`bin-keys\TableManagerKeys.exe` is the same table manager plus hotkeys. The
-standard `bin\TableManager.exe` doesn't have them. Don't run both at once:
+`bin-keys\tmk.exe` is the same table manager plus hotkeys. The
+standard `bin\tm.exe` doesn't have them. Don't run both at once:
 the hotkeys build refuses to start while the standard one is running.
 Turn off the hotkeys of other tools (e.g. Jurojin) while using it, otherwise
 a key fires twice.

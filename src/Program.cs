@@ -32,7 +32,7 @@ namespace TableManager
                 }
 #if ACTION_KEYS
                 // Обычный расстановщик и сборка с клавишами двигали бы одни и те же столы.
-                if (Process.GetProcessesByName("TableManager").Length > 0)
+                if (Process.GetProcessesByName("tm").Length > 0)
                 {
                     MessageBox.Show("Запущен обычный расстановщик — закройте его (значок в трее → Выход) "
                         + "и запустите эту сборку снова.", "Расстановщик столов");
