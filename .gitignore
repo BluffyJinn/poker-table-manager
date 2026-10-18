@@ -1,0 +1,9 @@
+# Сборки, настройки и журналы — у каждого свои (config.json там с вашими румами и кнопками).
+bin/
+bin-keys/
+*.exe
+*.old
+*.old.*
+*.log
+windows.txt
+FakeTable.clicks.txt
