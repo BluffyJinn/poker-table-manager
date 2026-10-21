@@ -69,6 +69,10 @@ namespace TableManager
         /// <summary>Рамка вокруг активного стола.</summary>
         public bool? FocusBorder { get; set; }
 
+        /// <summary>Стол стал активным — английская раскладка: горячие клавиши
+        /// клиентов (S, D…) в русской раскладке не срабатывают.</summary>
+        public bool? EnglishLayout { get; set; }
+
         /// <summary>Пауза между шагами нажатия, мс: некоторые клиенты не успевают.</summary>
         public int ClickDelayMs { get; set; }
 
@@ -101,6 +105,7 @@ namespace TableManager
                 OnlyWhenPokerActive = true,
                 FocusUnderMouse = true,
                 FocusBorder = true,
+                EnglishLayout = true,
                 ClickDelayMs = 20,
                 ToggleHotkey = "Ctrl+Alt+H",
                 Actions = new List<TableAction>
@@ -126,6 +131,7 @@ namespace TableManager
             if (config.Actions == null) config.Actions = defaults.Actions;
             if (config.FocusUnderMouse == null) config.FocusUnderMouse = defaults.FocusUnderMouse;
             if (config.FocusBorder == null) config.FocusBorder = defaults.FocusBorder;
+            if (config.EnglishLayout == null) config.EnglishLayout = defaults.EnglishLayout;
             if (string.IsNullOrEmpty(config.ClickMode)) config.ClickMode = defaults.ClickMode;
             if (config.RoomClickModes == null) config.RoomClickModes = defaults.RoomClickModes;
             if (config.ClientKeys == null) config.ClientKeys = defaults.ClientKeys;
@@ -237,6 +243,7 @@ namespace TableManager
         private readonly ToolStripMenuItem _toggleItem;
         private readonly ToolStripMenuItem _focusItem;
         private readonly ToolStripMenuItem _borderItem;
+        private readonly ToolStripMenuItem _englishItem;
         private readonly List<ToolStripMenuItem> _recordItems = new List<ToolStripMenuItem>();
         private readonly List<ToolStripItem> _roomItems = new List<ToolStripItem>();
         private List<Binding> _bindings = new List<Binding>();
@@ -245,6 +252,11 @@ namespace TableManager
         private bool _suspended;
         private DateTime _lastTyped = DateTime.MinValue;
         private POINT _lastCursor;
+
+        /// <summary>Активный стол прошлого тика: раскладка меняется, когда активным
+        /// становится другой стол.</summary>
+        private IntPtr _lastActive;
+        private bool _noEnglishLogged;
 
         /// <summary>Программы активного окна, из-за которых стол не стал активным, — уже в журнале.</summary>
         private readonly HashSet<string> _focusDenied = new HashSet<string>();
@@ -268,6 +280,11 @@ namespace TableManager
             _borderItem = new ToolStripMenuItem("Рамка вокруг активного стола", null, delegate
             {
                 Settings.FocusBorder = Settings.FocusBorder != true;
+                _save();
+            });
+            _englishItem = new ToolStripMenuItem("Английская раскладка на активном столе", null, delegate
+            {
+                Settings.EnglishLayout = Settings.EnglishLayout != true;
                 _save();
             });
             Menu = new ToolStripMenuItem("Клавиши за столами");
@@ -309,6 +326,7 @@ namespace TableManager
             Menu.DropDownItems.Add(_toggleItem);
             Menu.DropDownItems.Add(_focusItem);
             Menu.DropDownItems.Add(_borderItem);
+            Menu.DropDownItems.Add(_englishItem);
             Menu.DropDownItems.Add(new ToolStripSeparator());
             for (var i = 0; i < Settings.Actions.Count; i++)
             {
@@ -358,6 +376,7 @@ namespace TableManager
                 + "; нажатие: " + ModeName(Settings.ClickMode)
                 + string.Concat(Settings.RoomClickModes.Select(p => ", " + p.Key + " — " + ModeName(p.Value)).ToArray())
                 + (Settings.FocusUnderMouse == true ? "; стол под курсором — активный" : "")
+                + (Settings.EnglishLayout == true ? "; на активном столе — английская раскладка" : "")
                 + "; GG — без клавиш";
             if (Settings.ExcludeRooms.Count > 0) text += "; без клавиш: " + string.Join(", ", Settings.ExcludeRooms.ToArray());
             return text;
@@ -400,6 +419,7 @@ namespace TableManager
             _toggleItem.Checked = Settings.Enabled && !_suspended;
             _focusItem.Checked = Settings.FocusUnderMouse == true;
             _borderItem.Checked = Settings.FocusBorder == true;
+            _englishItem.Checked = Settings.EnglishLayout == true;
             foreach (var item in _roomItems) Menu.DropDownItems.Remove(item);
             _roomItems.Clear();
             var processes = new Dictionary<string, string>();
@@ -794,6 +814,8 @@ namespace TableManager
                 if (Settings.FocusUnderMouse == true) FocusUnderMouse(tables);
                 var foreground = KeyNative.GetForegroundWindow();
                 var active = tables.FirstOrDefault(t => t.Handle == foreground);
+                if (active != null && active.Handle != _lastActive && Settings.EnglishLayout == true) EnglishOn(active);
+                _lastActive = active == null ? IntPtr.Zero : active.Handle;
                 if (Settings.FocusBorder == true && active != null && !Native.IsIconic(active.Handle))
                 {
                     _frame.Around(Box.From(Native.FrameOf(active.Handle)));
@@ -827,6 +849,24 @@ namespace TableManager
             if (!tables.Any(t => t.Handle == foreground) && RecentlyTyped()) return;
             if (Busy(foreground)) return;
             Activate(table.Handle);
+        }
+
+        /// <summary>Стол стал активным — английская раскладка (просьба окну, как от
+        /// переключателя раскладки; нажатий нет). Один раз на активацию: переключили
+        /// раскладку сами (написать в чат) — программа с этим не спорит.</summary>
+        private void EnglishOn(TableWindow table)
+        {
+            uint pid;
+            var thread = Native.GetWindowThreadProcessId(table.Handle, out pid);
+            if (thread == 0 || KeyNative.IsEnglish(KeyNative.GetKeyboardLayout(thread))) return;
+            var english = KeyNative.EnglishLayout();
+            if (english == IntPtr.Zero)
+            {
+                if (!_noEnglishLogged) _log("Английской раскладки нет в Windows — раскладку на столах не меняю");
+                _noEnglishLogged = true;
+                return;
+            }
+            KeyNative.PostMessage(table.Handle, KeyNative.WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, english);
         }
 
         /// <summary>У активного окна открыто меню или его двигают — фокус не трогаем.
@@ -1114,6 +1154,15 @@ namespace TableManager
         private const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000, TOKEN_QUERY = 0x8;
         private const int TokenElevation = 20;
 
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetKeyboardLayout(uint thread);
+
+        [DllImport("user32.dll")]
+        private static extern int GetKeyboardLayoutList(int count, [Out] IntPtr[] layouts);
+
+        public const int WM_INPUTLANGCHANGEREQUEST = 0x0050;
+        private const int LANG_ENGLISH = 0x09, LANG_EN_US = 0x0409;
+
         public const int WH_KEYBOARD_LL = 13;
         public const int WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, WM_SYSKEYDOWN = 0x0104, WM_SYSKEYUP = 0x0105;
         public const int WM_MOUSEMOVE = 0x0200, WM_LBUTTONDOWN = 0x0201, WM_LBUTTONUP = 0x0202, MK_LBUTTON = 0x0001;
@@ -1159,6 +1208,28 @@ namespace TableManager
             ok = GetTokenInformation(token, TokenElevation, out elevated, sizeof(int), out size) && elevated != 0;
             CloseHandle(token);
             return ok;
+        }
+
+        /// <summary>Раскладка английская (США, Великобритания…): язык — младшие 16 бит.</summary>
+        public static bool IsEnglish(IntPtr layout)
+        {
+            return ((int)(layout.ToInt64() & 0xFFFF) & 0x3FF) == LANG_ENGLISH;
+        }
+
+        /// <summary>Установленная английская раскладка (сначала США); Zero — нет ни одной.</summary>
+        public static IntPtr EnglishLayout()
+        {
+            var count = GetKeyboardLayoutList(0, null);
+            if (count <= 0) return IntPtr.Zero;
+            var layouts = new IntPtr[count];
+            count = GetKeyboardLayoutList(count, layouts);
+            var found = IntPtr.Zero;
+            for (var i = 0; i < count; i++)
+            {
+                if ((layouts[i].ToInt64() & 0xFFFF) == LANG_EN_US) return layouts[i];
+                if (found == IntPtr.Zero && IsEnglish(layouts[i])) found = layouts[i];
+            }
+            return found;
         }
 
         /// <summary>Кнопка мыши там, где сейчас курсор.</summary>

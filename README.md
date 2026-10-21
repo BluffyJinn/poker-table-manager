@@ -132,6 +132,14 @@ a key fires twice.
   Focus is not taken while the cursor merely rests on a table (only when the
   mouse moves), while a mouse button is held, while a menu is open, and for
   1.5 s after you typed in another window.
+- **English layout on the active table:** when a table becomes active (by
+  hover or click) it is switched to an English keyboard layout, otherwise the
+  clients' own hotkeys (Winamax `S`, `D`) type Cyrillic letters in a Russian
+  layout. Once per activation — switch the layout yourself to chat and it
+  stays. With one layout for all windows (the Windows default) this also
+  changes it in your messenger; turn on "Let me use a different input method
+  for each app window" to avoid that. Toggle in the tray menu
+  (`EnglishLayout`).
 - **How a button is pressed** — chosen per room in tray menu → hotkeys →
   room:
 
@@ -170,6 +178,7 @@ Settings — the `ActionKeys` section of `bin-keys\config.json`:
   "OnlyWhenPokerActive": true,
   "FocusUnderMouse": true,
   "FocusBorder": true,
+  "EnglishLayout": true,
   "ClickDelayMs": 20,
   "ToggleHotkey": "Ctrl+Alt+H",
   "Actions": [

@@ -376,6 +376,11 @@ public static class LayoutTests
             "неполный раздел клавиш дополняется");
         Check(ActionKeysConfig.Fill(new ActionKeysConfig { FocusUnderMouse = false }).FocusUnderMouse == false,
             "выключенный фокус под мышкой не включается сам");
+        Check(keys.EnglishLayout == true && partial.EnglishLayout == true
+            && ActionKeysConfig.Fill(new ActionKeysConfig { EnglishLayout = false }).EnglishLayout == false,
+            "английская раскладка: по умолчанию включена, выключенная не включается сама");
+        Check(KeyNative.IsEnglish(new IntPtr(0x04090409)) && KeyNative.IsEnglish(new IntPtr(0x08090809))
+            && !KeyNative.IsEnglish(new IntPtr(0x04190419)), "английская раскладка — США и Великобритания, не русская");
         keys.ExcludeRooms.Add("QQPK");
         Check(keys.IsExcluded("qqpk") && !keys.IsExcluded("Redstar"), "рум без клавиш");
 
