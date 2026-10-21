@@ -150,7 +150,7 @@ namespace TableManager
             return monitors.Find(m => string.Equals(m.Device, name, StringComparison.OrdinalIgnoreCase));
         }
 
-        private static string ProcessName(uint pid)
+        public static string ProcessName(uint pid)
         {
             string name;
             if (ProcessNames.TryGetValue(pid, out name)) return name;
@@ -220,9 +220,10 @@ namespace TableManager
         /// правило рума, или указанное вручную (pinned); ignored — указано «не стол».
         /// У правила с Lobby = "largest" самое большое подходящее окно (по обычному
         /// размеру, и свёрнутое тоже) — лобби. В others — остальные не свёрнутые
-        /// окна румов. Room у столов заполняется.</summary>
+        /// окна румов. Room у столов заполняется. minimized — наоборот, только свёрнутые
+        /// окна, которые развёрнутыми были бы столами.</summary>
         public static List<TableWindow> Classify(List<TableWindow> windows, List<CompiledRule> rules,
-            ICollection<IntPtr> pinned, ICollection<IntPtr> ignored, List<TableWindow> others)
+            ICollection<IntPtr> pinned, ICollection<IntPtr> ignored, List<TableWindow> others, bool minimized = false)
         {
             var lobbies = new HashSet<IntPtr>();
             foreach (var rule in rules)
@@ -240,7 +241,7 @@ namespace TableManager
             var tables = new List<TableWindow>();
             foreach (var w in windows)
             {
-                if (w.Minimized) continue;
+                if (w.Minimized != minimized) continue;
                 CompiledRule owner = null;
                 CompiledRule matched = null;
                 foreach (var rule in rules)
@@ -277,13 +278,29 @@ namespace TableManager
             return Classify(Windows(), rules, pinned, ignored, others);
         }
 
-        /// <summary>Окна, которые лежат поверх столов, но сами не столы: HUD,
-        /// оверлеи видеокарты и системы.</summary>
+        /// <summary>Окна, которые лежат поверх столов, но сами не столы: оверлеи
+        /// видеокарты и системы.</summary>
         private static readonly Regex Overlays = new Regex(
-            @"^(Hand2Note.*|HoldemManager.*|HM3.*|PokerTracker.*|PT4.*|Jurojin.*|NVIDIA Overlay|RazerAppEngine|TextInputHost|ShellExperienceHost|StartMenuExperienceHost|SearchHost|SearchApp|LockApp)$",
+            @"^(NVIDIA Overlay|RazerAppEngine|TextInputHost|ShellExperienceHost|StartMenuExperienceHost|SearchHost|SearchApp|LockApp)$",
+            RegexOptions.IgnoreCase);
+
+        /// <summary>Трекеры: их HUD лежит на столах, а основное окно — обычная программа.</summary>
+        private static readonly Regex Trackers = new Regex(
+            @"^(Hand2Note.*|h2n.*|HoldemManager.*|HM3.*|PokerTracker.*|PT4.*|Jurojin.*)$",
             RegexOptions.IgnoreCase);
 
         private static readonly Regex DesktopClasses = new Regex(@"^(Progman|WorkerW|Shell_TrayWnd|Shell_SecondaryTrayWnd)$");
+
+        /// <summary>Сквозь окно видно стол под ним: оверлей или HUD трекера (окно
+        /// слоистое, служебное, без активации или «HUD» в заголовке). Основное окно
+        /// трекера закрывает стол, как любая другая программа.</summary>
+        public static bool SeeThrough(string process, string title, int exStyle)
+        {
+            if (Overlays.IsMatch(process)) return true;
+            if (!Trackers.IsMatch(process)) return false;
+            return (exStyle & (Native.WS_EX_LAYERED | Native.WS_EX_TOOLWINDOW | Native.WS_EX_NOACTIVATE)) != 0
+                || title.IndexOf("HUD", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
 
         /// <summary>Верхнее окно в точке экрана — то, что игрок видит под курсором.
         /// HUD и прозрачные оверлеи пропускаются. Только чтение.</summary>
@@ -294,12 +311,13 @@ namespace TableManager
             Native.EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
             {
                 if (!Native.IsWindowVisible(hWnd) || Native.IsIconic(hWnd) || Native.IsCloaked(hWnd)) return true;
-                if ((Native.GetWindowLong(hWnd, Native.GWL_EXSTYLE) & Native.WS_EX_TRANSPARENT) != 0) return true;
+                var exStyle = Native.GetWindowLong(hWnd, Native.GWL_EXSTYLE);
+                if ((exStyle & Native.WS_EX_TRANSPARENT) != 0) return true;
                 var frame = Native.FrameOf(hWnd);
                 if (x < frame.Left || x >= frame.Right || y < frame.Top || y >= frame.Bottom) return true;
                 var w = Describe(hWnd);
                 if (w.ProcessId == self || w.Title.Length == 0) return true;
-                if (Overlays.IsMatch(w.Process) || DesktopClasses.IsMatch(w.ClassName)) return true;
+                if (SeeThrough(w.Process, w.Title, exStyle) || DesktopClasses.IsMatch(w.ClassName)) return true;
                 found = w;
                 return false;
             }, IntPtr.Zero);

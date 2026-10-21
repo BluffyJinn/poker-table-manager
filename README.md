@@ -72,11 +72,12 @@ shortcut into `shell:startup`.
   places with the table in that slot). A table the client moved away on its
   own is put back.
 - Nothing moves while the left mouse button is held. Minimized tables are
-  left alone.
+  left alone until `Ctrl+Alt+L`, which restores them (without activating)
+  and arranges them with the rest.
 
 | | |
 |---|---|
-| `Ctrl+Alt+L` | re-arrange all tables |
+| `Ctrl+Alt+L` | re-arrange all tables, minimized ones too |
 | `Ctrl+Alt+K` or double-click the icon | show the slots for 3 seconds |
 | `Ctrl+Alt+T` (cursor over a window) | "this is a table" — and windows like it |
 | `Ctrl+Alt+N` (cursor over a window) | "this is not a table" |
@@ -154,6 +155,12 @@ a key fires twice.
 - A room can be excluded: tray menu → hotkeys → room → untick it.
 - A client running as administrator only accepts clicks and focus from a
   program that also runs as administrator.
+- Hand2Note runs as administrator too: while its window (HUD or main) is
+  active, a regular program sees no keys and can't activate a table. Run
+  `tmk.exe` as administrator as well — the log and a tray tip say so.
+- Tracker HUDs (Hand2Note, HM3, PT4, Jurojin) don't get in the way: hotkeys
+  and focus work with the cursor on a HUD. The tracker's main window covers a
+  table like any program: the table under it is not activated.
 
 Settings — the `ActionKeys` section of `bin-keys\config.json`:
 

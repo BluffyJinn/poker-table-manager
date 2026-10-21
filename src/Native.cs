@@ -46,8 +46,8 @@ namespace TableManager
         public string szDevice;
     }
 
-    /// <summary>Вызовы Win32. Окна клиентов только перечисляются и
-    /// перемещаются; ввод в клиенты не отправляется.</summary>
+    /// <summary>Вызовы Win32. Окна клиентов только перечисляются, перемещаются
+    /// и разворачиваются; ввод в клиенты не отправляется.</summary>
     public static class Native
     {
         public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
@@ -91,6 +91,13 @@ namespace TableManager
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int cx, int cy, uint flags);
+
+        /// <summary>Без ожидания: зависший клиент не задержит расстановщик.</summary>
+        [DllImport("user32.dll")]
+        public static extern bool ShowWindowAsync(IntPtr hWnd, int command);
+
+        /// <summary>Развернуть свёрнутое окно в прежний размер, не делая его активным.</summary>
+        public const int SW_SHOWNOACTIVATE = 4;
 
         [DllImport("user32.dll")]
         public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr clip, MonitorEnumProc callback, IntPtr data);

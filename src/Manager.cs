@@ -8,8 +8,9 @@ namespace TableManager
     /// <summary>Сердце расстановщика. Каждый тик: находит столы, выбирает уровень
     /// раскладки по их числу, новым даёт первую свободную ячейку, проверяет, что
     /// стол встал, и держит столы в ячейках. Окна только перемещаются
-    /// (SetWindowPos без активации) — фокус, ввод и содержимое клиентов не
-    /// затрагиваются.</summary>
+    /// (SetWindowPos без активации), а по «Расставить все» свёрнутые столы ещё и
+    /// разворачиваются (тоже без активации) — фокус, ввод и содержимое клиентов
+    /// не затрагиваются.</summary>
     public class Manager
     {
         private class State
@@ -42,6 +43,9 @@ namespace TableManager
         private const int MaxReturns = 5;
         private static readonly TimeSpan ReturnsPeriod = TimeSpan.FromMinutes(1);
 
+        /// <summary>Сколько ждать, пока развернутся свёрнутые столы, перед расстановкой.</summary>
+        private static readonly TimeSpan RestoreWait = TimeSpan.FromSeconds(1.5);
+
         private Config _config;
         private List<CompiledRule> _rules;
         private SlotTracker _tracker = new SlotTracker();
@@ -50,6 +54,11 @@ namespace TableManager
         private bool _adopted;
         private int _level;
         private DateTime _mouseDownAt = DateTime.MinValue;
+
+        /// <summary>Свёрнутые столы, развёрнутые по «Расставить все»: пока они
+        /// разворачиваются, тик ждёт и потом расставляет всё разом.</summary>
+        private HashSet<IntPtr> _restoring;
+        private DateTime _restoreUntil;
 
         /// <summary>Окна, указанные столом вручную, когда правило не построить, и
         /// окна, указанные «не стол». Живут, пока открыто окно.</summary>
@@ -147,6 +156,16 @@ namespace TableManager
             TableCount = tables.Count;
             var capacities = Capacities(monitors);
             LogOthers(others);
+
+            // Развёрнутые столы не ставятся по одному как новые — расстановка всех
+            // разом, когда развернутся (или когда ждать надоест).
+            if (_restoring != null)
+            {
+                if (DateTime.Now < _restoreUntil && _restoring.Any(h => Native.IsWindow(h) && Native.IsIconic(h))) return;
+                _restoring = null;
+                RelayoutAll(tables, monitors);
+                return;
+            }
 
             // Пока зажата левая кнопка (клик, перетаскивание) — ничего не двигаем,
             // чтобы окно не уехало из-под курсора. Сдвиг сразу после отпускания —
@@ -455,10 +474,21 @@ namespace TableManager
         }
 
         /// <summary>Расставить все столы заново: уровень — по числу столов, каждый
-        /// стол — в ближайшую свободную ячейку, ручные сдвиги сбрасываются.</summary>
+        /// стол — в ближайшую свободную ячейку, ручные сдвиги сбрасываются.
+        /// Свёрнутые столы сначала разворачиваются (без активации), а расставляются
+        /// все на следующем тике, когда развернутся.</summary>
         public void RelayoutAll()
         {
-            RelayoutAll(FindTables(), Desktop.Monitors());
+            var minimized = Desktop.Classify(Desktop.Windows(), _rules, _pinned, _ignored, null, true);
+            if (minimized.Count == 0)
+            {
+                RelayoutAll(FindTables(), Desktop.Monitors());
+                return;
+            }
+            foreach (var table in minimized) Native.ShowWindowAsync(table.Handle, Native.SW_SHOWNOACTIVATE);
+            _restoring = new HashSet<IntPtr>(minimized.Select(t => t.Handle));
+            _restoreUntil = DateTime.Now + RestoreWait;
+            Write("Разворачиваю свёрнутые столы: " + minimized.Count);
         }
 
         private void RelayoutAll(List<TableWindow> tables, List<MonitorInfo> monitors)

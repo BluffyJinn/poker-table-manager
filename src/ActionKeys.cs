@@ -245,7 +245,9 @@ namespace TableManager
         private bool _suspended;
         private DateTime _lastTyped = DateTime.MinValue;
         private POINT _lastCursor;
-        private bool _focusDeniedLogged;
+
+        /// <summary>Программы активного окна, из-за которых стол не стал активным, — уже в журнале.</summary>
+        private readonly HashSet<string> _focusDenied = new HashSet<string>();
 
         /// <summary>Подменю «Клавиши за столами» для трея.</summary>
         public ToolStripMenuItem Menu { get; private set; }
@@ -755,12 +757,27 @@ namespace TableManager
                 if (attached) KeyNative.AttachThreadInput(self, thread, false);
             }
             var ok = KeyNative.GetForegroundWindow() == window;
-            if (!ok && !_focusDeniedLogged)
-            {
-                _focusDeniedLogged = true;
-                _log("Windows не дала сделать стол активным (клиент от администратора?)");
-            }
+            if (!ok) FocusDenied(pid);
             return ok;
+        }
+
+        /// <summary>Почему стол не стал активным — по разу на программу активного окна.
+        /// Частая причина — программа от администратора (Hand2Note, клиент): пока её
+        /// окно активно, Windows не показывает клавиши обычной программе и не отдаёт
+        /// ей фокус.</summary>
+        private void FocusDenied(uint pid)
+        {
+            var name = pid == 0 ? "" : Desktop.ProcessName(pid);
+            if (!_focusDenied.Add(name)) return;
+            if (KeyNative.Elevated(pid) && !KeyNative.Elevated((uint)System.Diagnostics.Process.GetCurrentProcess().Id))
+            {
+                var text = name + " запущен от администратора: пока активно его окно, клавиши за столами не работают"
+                    + " и стол не становится активным — запустите расстановщик тоже от администратора";
+                _log(text);
+                _notify(text);
+                return;
+            }
+            _log("Windows не дала сделать стол активным" + (name.Length > 0 ? " (активно окно " + name + ")" : ""));
         }
 
         /// <summary>Фокус под мышкой и рамка активного стола (каждые 50 мс).</summary>
@@ -1082,6 +1099,21 @@ namespace TableManager
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint SendInput(uint count, INPUT[] inputs, int size);
 
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+
+        [DllImport("kernel32.dll")]
+        private static extern bool CloseHandle(IntPtr handle);
+
+        [DllImport("advapi32.dll")]
+        private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+
+        [DllImport("advapi32.dll")]
+        private static extern bool GetTokenInformation(IntPtr token, int infoClass, out int info, int length, out int returned);
+
+        private const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000, TOKEN_QUERY = 0x8;
+        private const int TokenElevation = 20;
+
         public const int WH_KEYBOARD_LL = 13;
         public const int WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, WM_SYSKEYDOWN = 0x0104, WM_SYSKEYUP = 0x0105;
         public const int WM_MOUSEMOVE = 0x0200, WM_LBUTTONDOWN = 0x0201, WM_LBUTTONUP = 0x0202, MK_LBUTTON = 0x0001;
@@ -1112,6 +1144,21 @@ namespace TableManager
         {
             ScreenToClient(window, ref screen);
             return screen;
+        }
+
+        /// <summary>Процесс запущен от администратора; false — нет или не узнать.</summary>
+        public static bool Elevated(uint pid)
+        {
+            var process = pid == 0 ? IntPtr.Zero : OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+            if (process == IntPtr.Zero) return false;
+            IntPtr token;
+            var ok = OpenProcessToken(process, TOKEN_QUERY, out token);
+            CloseHandle(process);
+            if (!ok) return false;
+            int elevated, size;
+            ok = GetTokenInformation(token, TokenElevation, out elevated, sizeof(int), out size) && elevated != 0;
+            CloseHandle(token);
+            return ok;
         }
 
         /// <summary>Кнопка мыши там, где сейчас курсор.</summary>

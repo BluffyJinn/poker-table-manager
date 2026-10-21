@@ -305,6 +305,15 @@ public static class LayoutTests
         Check(Desktop.Classify(new List<TableWindow> { Win("GGnet", "ApolloRuntimeContentWindow", "Daily $5.40 - Стол 3", 900, 700, true) },
             rules, null, null, null).Count == 0, "свёрнутый стол не расставляется");
 
+        // «Расставить все» разворачивает свёрнутые столы — только их.
+        var folded = Win("GGnet", "ApolloRuntimeContentWindow", "Daily $5.40 - Стол 5", 900, 700, true);
+        var foldedLobby = Win("GGnet", "ApolloRuntimeContentWindow", "Лобби", 900, 700, true);
+        var open = Win("GGnet", "ApolloRuntimeContentWindow", "Daily $5.40 - Стол 6");
+        var unfold = Desktop.Classify(new List<TableWindow> { folded, foldedLobby, open }, rules, null, null, null, true);
+        Check(unfold.Count == 1 && unfold[0].Handle == folded.Handle, "разворачиваются свёрнутые столы, не лобби и не открытые");
+        Check(Desktop.Classify(new List<TableWindow> { folded }, rules, null, new HashSet<IntPtr> { folded.Handle }, null, true).Count == 0,
+            "свёрнутое «не стол» не разворачивается");
+
         Check(Regex.IsMatch("Balance: $1,234.50", RuleBuilder.Exact("Balance: $72.22")), "числа в исключениях — любые");
         Check(!Regex.IsMatch("Winamax Kill", RuleBuilder.Exact("Winamax")), "исключение — весь заголовок");
 
@@ -323,6 +332,13 @@ public static class LayoutTests
         var grid = Layout.Cells(new Box(0, 0, 3840, 2088), 3, 2, 0);
         Check(Layout.SlotAt(grid, 1500, 300) == 1 && Layout.SlotAt(grid, 100, 1500) == 3 && Layout.SlotAt(grid, -5, 10) == -1,
             "ячейка под центром брошенного стола");
+
+        // Окно под курсором: HUD трекера и оверлеи — насквозь, основное окно трекера — нет.
+        Check(Desktop.SeeThrough("Hand2Note", "Hand2Note HUD", Native.WS_EX_LAYERED | 0x4), "HUD Hand2Note — насквозь");
+        Check(!Desktop.SeeThrough("Hand2Note", "Hand2Note", 0x40000), "основное окно Hand2Note закрывает стол");
+        Check(Desktop.SeeThrough("PokerTracker4", "", Native.WS_EX_TOOLWINDOW), "служебное окно трекера — насквозь");
+        Check(Desktop.SeeThrough("NVIDIA Overlay", "NVIDIA GeForce Overlay", 0), "оверлей видеокарты — насквозь");
+        Check(!Desktop.SeeThrough("Telegram", "Telegram", Native.WS_EX_LAYERED), "другая программа закрывает стол");
 
 #if ACTION_KEYS
         // Клавиши за столами: кнопка в долях клиентской области переживает изменение размера стола.
